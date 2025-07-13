@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Edge API Gateway for Lambda integration"
+
+Resources:
+  EdgeApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: EdgeApi
+      EndpointConfiguration:
+        Types:
+          - EDGE
+
+  RootResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref EdgeApi
+      ParentId: !GetAtt EdgeApi.RootResourceId
+      PathPart: test
+
+  EdgeApiMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: GET
+      ResourceId: !Ref RootResource
+      RestApiId: !Ref EdgeApi
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 
+          - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+          - Region: !Ref "AWS::Region"
+            LambdaArn: !ImportValue LambdaFunctionArn
+
+  EdgeApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: EdgeApiMethod
+    Properties:
+      RestApiId: !Ref EdgeApi
+      StageName: test
+
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !ImportValue LambdaFunctionArn
+      Principal: apigateway.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceArn: !Sub 
+        - "arn:aws:execute-api:${Region}:${Account}:${EdgeApiId}/*/*/test"
+        - Region: !Ref "AWS::Region"
+          Account: !Ref "AWS::AccountId"
+          EdgeApiId: !Ref EdgeApi
+
+Outputs:
+  EdgeApiInvokeAPI:
+    Description: "Invoke URL for Edge API"
+    Value: !Sub 
+      - "https://${EdgeApi}.execute-api.${Region}.amazonaws.com/test/test"
+      - EdgeApi: !Ref EdgeApi
+        Region: !Ref "AWS::Region"
+    Export:
+      Name: EdgeApiInvokeAPI

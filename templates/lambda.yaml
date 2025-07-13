@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Common Lambda function for all API Gateway endpoints hands-on"
+
+Resources:
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: HelloFunction
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: python3.12
+      Code:
+        ZipFile: |
+          import json
+          
+          def handler(event, context):
+            try:
+              print("Event:", json.dumps(event))
+              print("Context:", str(context))
+              
+              return {
+                'statusCode': 200,
+                'headers': {
+                  'Content-Type': 'application/json',
+                  'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({
+                  'message': 'Hello, from lambda',
+                  'event': event
+                })
+              }
+            except Exception as e:
+              print("Error:", str(e))
+              return {
+                'statusCode': 500,
+                'headers': {
+                  'Content-Type': 'application/json'
+                },
+                'body': json.dumps({
+                  'error': str(e)
+                })
+              }
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: LambdaLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "arn:aws:logs:*:*:*"
+Outputs:
+  LambdaFunctionArn:
+    Description: "ARN of the deployed Lambda function"
+    Value: !GetAtt LambdaFunction.Arn
+    Export:
+      Name: "LambdaFunctionArn"

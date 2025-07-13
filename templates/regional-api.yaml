@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Regional API Gateway for Lambda integration"
+
+Resources:
+  RegionalApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: RegionalApi
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  RootResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RegionalApi
+      ParentId: !GetAtt RegionalApi.RootResourceId
+      PathPart: test
+
+  RegionalApiMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: GET
+      ResourceId: !Ref RootResource
+      RestApiId: !Ref RegionalApi
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 
+          - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaFunctionArn}/invocations
+          - Region: !Ref "AWS::Region"
+            LambdaFunctionArn: !ImportValue LambdaFunctionArn
+
+  LambdaPermissionRegional:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !ImportValue LambdaFunctionArn
+      Principal: apigateway.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceArn: !Sub 
+        - "arn:aws:execute-api:${Region}:${Account}:${RegionalApiId}/*/*/test"
+        - Region: !Ref "AWS::Region"
+          Account: !Ref "AWS::AccountId"
+          RegionalApiId: !Ref RegionalApi
+
+  RegionalDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: RegionalApiMethod
+    Properties:
+      RestApiId: !Ref RegionalApi
+      StageName: test
+
+Outputs:
+  RegionalApiInvokeAPI:
+    Description: "Invoke URL for Regional API"
+    Value: !Sub 
+      - "https://${RegionalApi}.execute-api.${AWSRegion}.amazonaws.com/test/test"
+      - RegionalApi: !Ref RegionalApi
+        AWSRegion: !Ref "AWS::Region"
+    Export:
+      Name: RegionalApiInvokeAPI
